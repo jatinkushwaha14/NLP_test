@@ -64,12 +64,6 @@ logs/
 Thumbs.db
 ehthumbs.db
 
-# Large data files (optional - comment out if you want to track sample outputs)
-# *.pdf
-# *.png
-# *.jpg
-# *.jpeg
-
 # Cache directories
 .cache/
 .huggingface/
