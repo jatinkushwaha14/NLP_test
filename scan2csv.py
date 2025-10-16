@@ -76,12 +76,48 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"Input directory: {args.in_dir}")
-    print(f"Output CSV: {args.out_csv}")
-    print(f"Output JSON: {args.out_json}")
+    logger.info(f"Input directory: {args.in_dir}")
+    logger.info(f"Output CSV: {args.out_csv}")
+    logger.info(f"Output JSON: {args.out_json}")
 
-    # TODO: Implement OCR pipeline
-    print("Pipeline not implemented yet")
+    input_path = Path(args.in_dir)
+    if not input_path.exists():
+        logger.error(f"Input directory '{args.in_dir}' does not exist")
+        sys.exit(1)
+    
+    SAMPLE_OUTPUT_DIR.mkdir(exist_ok=True)
+    RAW_OUTPUT_DIR.mkdir(exist_ok=True)
+    logger.info("Output directories created")
+
+    dolphin = load_dolphin_model()
+    if dolphin is None:
+        logger.error("Failed to load Dolphin model. Exiting.")
+        sys.exit(1)
+    
+    supported_files = find_supported_files(args.in_dir)
+    if not supported_files:
+        logger.warning("No supported files found")
+        return
+
+    for file_path in supported_files:
+        logger.info(f"Processing: {file_path.name}")
+        
+        if file_path.suffix.lower() == '.pdf':
+            images = convert_pdf_to_images(file_path)
+            logger.info(f"PDF converted to {len(images)} images")
+        else:
+            try:
+                image = Image.open(file_path)
+                images = [image]
+                logger.info("Image loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load image {file_path.name}: {e}")
+                continue
+        
+        # TODO: Process images with Dolphin OCR
+        logger.info("OCR processing will be implemented next")
+
+    logger.info("Processing complete!")
 
 if __name__ == "__main__":
     main()
