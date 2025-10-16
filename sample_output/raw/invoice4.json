@@ -1,0 +1,9 @@
+[
+  {
+    "file": "invoice4.pdf",
+    "method": "dolphin_ocr",
+    "page": 1,
+    "raw_text": "",
+    "text_length": 0
+  }
+]

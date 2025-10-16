@@ -11,3 +11,5 @@ sentencepiece
 protobuf
 datasets
 timm
+pdfplumber
+PyPDF2
