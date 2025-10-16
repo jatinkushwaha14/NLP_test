@@ -5,7 +5,7 @@ from pathlib import Path
 import json
 from pdf2image import convert_from_path
 from PIL import Image
-
+import torch
 
 
 from config import (
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def load_dolphin_model():
     try:
-        logger.info(f"Loading Dolphin model: {MODEL_NAME}")
+        logger.info(f"Loading Dolphin model:{MODEL_NAME}")
         from transformers import AutoProcessor, AutoModelForVision2Seq
         import torch
         
@@ -68,6 +68,32 @@ def find_supported_files(input_dir):
     
     return supported_files
 
+def process_image_with_dolphin(image,dolphin_model,file_name):
+    try:
+        logger.info(f"Running OCR on {file_name}")
+        
+        model = dolphin_model["model"]
+        processor = dolphin_model["processor"]
+        device = dolphin_model["device"]
+        
+        # Prepare the image for Dolphin
+        inputs = processor(images=image,return_tensors="pt")
+        inputs = inputs.to(device)
+        
+        # Generate OCR output
+        with torch.no_grad():
+            generated_ids = model.generate(**inputs, max_new_tokens=1000)
+        
+        # Decode the result
+        generated_text = processor.batch_decode(generated_ids,skip_special_tokens=True)[0]
+        
+        logger.info(f"OCR completed for {file_name}")
+        return generated_text
+        
+    except Exception as e:
+        logger.error(f"OCR failed for {file_name}: {e}")
+        return ""
+
 def main():
     parser = argparse.ArgumentParser(description="Convert scanned invoices to CSV/JSON using Dolphin OCR")
     parser.add_argument("--in_dir", type=str, required=True, help="Input directory containing scanned invoices")
@@ -114,8 +140,26 @@ def main():
                 logger.error(f"Failed to load image {file_path.name}: {e}")
                 continue
         
-        # TODO: Process images with Dolphin OCR
-        logger.info("OCR processing will be implemented next")
+        # Process images with Dolphin OCR
+        ocr_results = []
+        for i, image in enumerate(images):
+            page_name = f"{file_path.stem}_page_{i+1}"
+            ocr_text = process_image_with_dolphin(image, dolphin, page_name)
+            
+            if ocr_text:
+                ocr_results.append({
+                    "file": file_path.name,
+                    "page": i+1,
+                    "ocr_text": ocr_text
+                })
+        
+        # Save raw OCR output to JSON
+        if ocr_results:
+            output_file = RAW_OUTPUT_DIR / f"{file_path.stem}.json"
+            with open(output_file, 'w') as f:
+                json.dump(ocr_results, f, indent=2)
+            logger.info(f"Raw OCR saved to {output_file}")
+
 
     logger.info("Processing complete!")
 
