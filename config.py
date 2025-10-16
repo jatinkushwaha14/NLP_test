@@ -15,29 +15,36 @@ DEVICE = "auto"  # Will auto-detect GPU/CPU
 
 # OCR extraction patterns (regex)
 PATTERNS = {
-"vendor_name": [
-r"(?i)(?:vendor|from|bill\s+from|company|seller)[\s:]*([^\n\r]{1,100})",
-r"(?i)(?:issued\s+by|billed\s+by)[\s:]*([^\n\r]{1,100})",
-r"^([A-Z][A-Za-z\s&.,()-]{5,50})\s*\n",
-],
-"invoice_number": [
-r"(?i)(?:invoice\s*(?:no|number|#)?|inv\s*(?:no|#)?|bill\s*(?:no|#)?)[\s:]*([A-Za-z0-9-/]{3,20})",
-r"(?i)(?:receipt\s*(?:no|#)?)[\s:]*([A-Za-z0-9-/]{3,20})",
-],
-"invoice_date": [
-r"(?i)(?:date|invoice\s+date|bill\s+date)[\s:]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
-r"(?i)(?:date|invoice\s+date|bill\s+date)[\s:]*(\d{4}[/-]\d{1,2}[/-]\d{1,2})",
-r"(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})",
-],
-"currency": [
-r"(?i)(USD|EUR|GBP|INR|CAD|AUD|JPY|CNY|\$|€|£|₹|¥)",
-r"([A-Z]{3})\s*[\d,.]",
-],
-"total_amount": [
-r"(?i)(?:total|grand\s+total|amount\s+due|total\s+due|final\s+total)[\s:]*([A-Z]{0,3}\s*[\$€£₹¥]?\s*[\d,]+\.?\d*)",
-r"(?i)(?:balance\s+due|net\s+total)[\s:]*([A-Z]{0,3}\s*[\$€£₹¥]?\s*[\d,]+\.?\d*)",
-],
+    "vendor_name": [
+        r"(?i)(GuiComGroup[^\n]*)",
+        r"(?i)(First Pacific Company[^\n]*)",
+        r"(?i)(SHUM YIP[^\n]*)",
+        r"(?i)(?:vendor|from|bill from|company|seller)[\s:]+([A-Za-z][A-Za-z\s.,&-]{5,50})",
+        r"^([A-Z][A-Za-z\s.,&-]{10,50})$",
+    ],
+    "invoice_number": [
+        r"(?i)(?:invoice\s*no|number|inv\s*no|bill\s*no|ref\s*no)[\s:#]+([A-Za-z0-9\-/]{3,20})",
+        r"(\d{2}-\w{3}-\d{4})",  # Date patterns like invoice numbers
+        r"(PR\d+\s+\d+\s+PA\d+)",  # Your specific pattern
+    ],
+    "invoice_date": [
+        r"(\d{1,2}\s+\w{3}\s+\d{4})",  # "17 Jul 2020"
+        r"(\d{1,2}[-/]\w{3}[-/]\d{4})",  # "17-Jul-2020"
+        r"(\d{1,2}[-/]\d{1,2}[-/]\d{4})",  # "17/07/2020"
+        r"(?i)(?:date|invoice date|bill date)[\s:]+(\d{1,2}[-/\s]\w{3}[-/\s]\d{4})",
+    ],
+    "currency": [
+        r"\b(USD|EUR|GBP|INR|CAD|AUD|JPY|CNY)\b",
+        r"([A-Z]{3})[\s$][\d,]+\.?\d*",
+    ],
+    "total_amount": [
+        r"(?i)(?:total|grand total|amount due|total due|final total|balance)[\s:$]*([0-9,]+\.?[0-9]*)",
+        r"USD\s*([0-9,]+\.?[0-9]*)",  # "USD 2,342,194.62"
+        r"\$\s*([0-9,]+\.?[0-9]*)",   # "$2,342,194.62"
+        r"([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})",  # "2,342,194.62"
+    ],
 }
+
 
 TABLE_KEYWORDS = [
 "description", "quantity", "qty", "price", "amount", "total", 

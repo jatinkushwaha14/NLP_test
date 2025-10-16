@@ -1,0 +1,5 @@
+filename,line_number,description,quantity,unit_price,amount
+invoice3.pdf,1,Sample line item,1,0.0,0.0
+invoice2.pdf,1,Sample line item,1,0.0,0.0
+invoice1.pdf,1,Sample line item,1,0.0,0.0
+invoice4.pdf,1,Sample line item,1,0.0,0.0

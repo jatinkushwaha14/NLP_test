@@ -1,0 +1,3 @@
+filename,vendor_name,invoice_number,invoice_date,currency,total_amount
+invoice3.pdf,GuiComGroup,2015850100,20 PR1 1414,Jul,"2,342,194.62"
+invoice2.pdf,,,,,0.68

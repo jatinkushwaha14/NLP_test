@@ -3,7 +3,7 @@
     "file": "invoice1.pdf",
     "method": "dolphin_ocr",
     "page": 1,
-    "raw_text": "[0.17,0.00,0.89]",
+    "raw_text": "[0.18,0.00,0.81]",
     "text_length": 16
   }
 ]

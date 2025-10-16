@@ -10,9 +10,42 @@ import PyPDF2
 import pdfplumber
 
 import re
+import csv
+from config import (
+    SAMPLE_SCANS_DIR, SAMPLE_OUTPUT_DIR, RAW_OUTPUT_DIR,
+    HEADER_CSV, LINES_CSV, MODEL_NAME, DEVICE, SUPPORTED_EXTENSIONS
+)
+def save_extracted_fields_to_csv(all_results, csv_path):
+    csv_data = []
+    
+    for file_results in all_results:
+        for result in file_results:
+            # Extract fields from successful OCR
+            if result.get("extracted_fields"):
+                fields = result["extracted_fields"]
+                csv_data.append({
+                    "filename": result["file"],
+                    "vendor_name": fields.get("vendor_name", ""),
+                    "invoice_number": fields.get("invoice_number", ""),  
+                    "invoice_date": fields.get("invoice_date", ""),
+                    "currency": fields.get("currency", ""),
+                    "total_amount": fields.get("total_amount", "")
+                })
+    
+    # Write CSV
+    if csv_data:
+        fieldnames = ["filename", "vendor_name", "invoice_number", "invoice_date", "currency", "total_amount"]
+        with open(csv_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in csv_data:
+                writer.writerow(row)
+        
+        logger.info(f"CSV saved to {csv_path} with {len(csv_data)} records")
+    else:
+        logger.warning("No extracted fields found for CSV generation")
 
 def validate_fields_with_dolphin(pdf_extracted_fields, dolphin_extracted_fields, file_name):
-    """Validate critical fields between PDF regex and Dolphin extraction."""
     from config import PATTERNS
     
     validation_results = {
@@ -39,22 +72,55 @@ def validate_fields_with_dolphin(pdf_extracted_fields, dolphin_extracted_fields,
     return validation_results
 
 def extract_fields_with_regex(text):
-    """Extract fields using regex patterns from config."""
+
     from config import PATTERNS
     
     fields = {}
     for field_name, pattern_list in PATTERNS.items():
-        for pattern in pattern_list:
+        fields[field_name] = ""  
+        for i, pattern in enumerate(pattern_list):
+
             match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
             if match:
-                fields[field_name] = match.group(1).strip()
-                break
+                extracted_text = match.group(1).strip()
+                extracted_text = re.sub(r'\s+', ' ', extracted_text)
+                fields[field_name] = extracted_text
+                logger.info(f"✅ Found {field_name}: '{extracted_text}' using pattern {i}")
+                break 
         
-        if field_name not in fields:
-            fields[field_name] = ""
+        if not fields[field_name]:
+            logger.debug(f"No match found for {field_name}")
     
     return fields
 
+def save_line_items_to_csv(all_results, csv_path):
+    """Save extracted line items to CSV."""
+    csv_data = []
+    
+    for file_results in all_results:
+        for result in file_results:
+            filename = result["file"]
+            # For now, create placeholder line items
+            # TODO: Extract actual line items from OCR text
+            csv_data.append({
+                "filename": filename,
+                "line_number": 1,
+                "description": "Sample line item", 
+                "quantity": 1,
+                "unit_price": 0.00,
+                "amount": 0.00
+            })
+    
+    # Write CSV
+    if csv_data:
+        fieldnames = ["filename", "line_number", "description", "quantity", "unit_price", "amount"]
+        with open(csv_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in csv_data:
+                writer.writerow(row)
+        
+        logger.info(f"Lines CSV saved to {csv_path} with {len(csv_data)} records")
 
 def extract_text_from_pdf(pdf_path):
     try:
@@ -146,10 +212,7 @@ def process_file_hybrid(file_path, dolphin, extraction_method):
 
     return results
 
-from config import (
-    SAMPLE_SCANS_DIR, SAMPLE_OUTPUT_DIR, RAW_OUTPUT_DIR,
-    HEADER_CSV, LINES_CSV, MODEL_NAME, DEVICE, SUPPORTED_EXTENSIONS
-)
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -190,7 +253,12 @@ def load_dolphin_model():
 def convert_pdf_to_images(pdf_path):
     try:
         logger.info(f"Converting PDF to images: {pdf_path.name}")
-        images = convert_from_path(pdf_path, dpi=200)
+        images = convert_from_path(
+            pdf_path, 
+            dpi=300,  # Increased from 200
+            grayscale=True,  # Better for OCR
+            fmt='PNG'
+        )
         logger.info(f"Converted {len(images)} pages from PDF")
         return images
     except Exception as e:
@@ -282,14 +350,11 @@ def process_image_with_dolphin(image, dolphin_model, file_name):
     
 
 def process_text_with_dolphin(text, dolphin_model, file_name):
-    """Process extracted PDF text with Dolphin for field extraction."""
+
     try:
         logger.info(f"Processing PDF text with Dolphin for {file_name}")
         
-        # For text processing, we'll use a different approach
-        # Create a simple text image or use regex + structured prompt
-        
-        # Simple field extraction using the extracted text
+
         extracted_info = f"""
         Based on the PDF text, extract these fields:
         
@@ -311,7 +376,6 @@ def process_text_with_dolphin(text, dolphin_model, file_name):
         return ""
 
 def extract_fields_from_dolphin_output(dolphin_output):
-    """Extract structured fields from Dolphin's JSON/Markdown output."""
     fields = {
         "vendor_name": "",
         "invoice_number": "",
@@ -376,20 +440,31 @@ def main():
     if not supported_files:
         logger.warning("No supported files found")
         return
-
+    all_results = []
     for file_path in supported_files:
         logger.info(f"Processing: {file_path.name}")
         
-        # Use hybrid processing approach
         results = process_file_hybrid(file_path, dolphin, args.method)
+        all_results.append(results)
         
-        # Save results
+        # Save individual JSON results
         if results:
             output_file = RAW_OUTPUT_DIR / f"{file_path.stem}.json"
             with open(output_file, 'w') as f:
                 json.dump(results, f, indent=2)
             logger.info(f"Processed output saved to {output_file}")
 
+    # Generate final CSV with all extracted fields
+
+    # Generate final CSV with all extracted fields  
+    header_csv_path = SAMPLE_OUTPUT_DIR / HEADER_CSV
+    lines_csv_path = SAMPLE_OUTPUT_DIR / LINES_CSV
+
+    save_extracted_fields_to_csv(all_results, header_csv_path)
+    save_line_items_to_csv(all_results, lines_csv_path)  # We'll create this next
+
+    logger.info(f"Header CSV saved to: {header_csv_path}")
+    logger.info(f"Lines CSV saved to: {lines_csv_path}")
     logger.info("Processing complete!")
 
 if __name__ == "__main__":
