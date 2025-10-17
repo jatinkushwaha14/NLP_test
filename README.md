@@ -14,6 +14,10 @@ Convert scanned invoices (PDFs/images) into structured CSV and JSON datasets usi
 ## Flow Diagram
 Load Scans → PDF Text Extract / Convert to Images → Dolphin OCR → Regex Extraction → Validation → Export CSV/JSON
 
+## Flow Diagram
+
+![Processing Pipeline](docs/flow_diagram.png)
+
 
 ## How to Run
 pip install -r requirements.txt
