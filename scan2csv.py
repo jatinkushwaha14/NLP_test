@@ -6,8 +6,8 @@ import json
 from pdf2image import convert_from_path
 from PIL import Image
 import torch
-import PyPDF2
-import pdfplumber
+import cv2
+import numpy as np
 
 import re
 import csv
@@ -15,6 +15,49 @@ from config import (
     SAMPLE_SCANS_DIR, SAMPLE_OUTPUT_DIR, RAW_OUTPUT_DIR,
     HEADER_CSV, LINES_CSV, MODEL_NAME, DEVICE, SUPPORTED_EXTENSIONS
 )
+
+def preprocess_image_for_ocr(pil_image):
+    # Convert PIL image to OpenCV format
+    cv_image = np.array(pil_image)
+    if cv_image.ndim == 3:
+        cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
+    
+    # Convert to grayscale
+    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+    
+    # Apply bilateral filter (smooth while preserving edges)
+    filtered = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
+
+    # Thresholding (binarization)
+    _, thresh = cv2.threshold(filtered, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Convert back to PIL
+    processed_pil = Image.fromarray(thresh)
+
+    return processed_pil
+
+def extract_fields_with_regex(text):
+
+    from config import PATTERNS
+    
+    fields = {}
+    for field_name, pattern_list in PATTERNS.items():
+        fields[field_name] = ""  
+        for i, pattern in enumerate(pattern_list):
+
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                extracted_text = match.group(1).strip()
+                extracted_text = re.sub(r'\s+', ' ', extracted_text)
+                fields[field_name] = extracted_text
+                logger.info(f"**Found {field_name}: '{extracted_text}' using pattern {i}")
+                break 
+        
+        if not fields[field_name]:
+            logger.debug(f"No match found for {field_name}")
+    
+    return fields
+
 def save_extracted_fields_to_csv(all_results, csv_path):
     csv_data = []
     
@@ -45,53 +88,6 @@ def save_extracted_fields_to_csv(all_results, csv_path):
     else:
         logger.warning("No extracted fields found for CSV generation")
 
-def validate_fields_with_dolphin(pdf_extracted_fields, dolphin_extracted_fields, file_name):
-    from config import PATTERNS
-    
-    validation_results = {
-        "file": file_name,
-        "pdf_extraction": pdf_extracted_fields,
-        "dolphin_extraction": dolphin_extracted_fields,
-        "validation": {}
-    }
-    
-    # Validate key fields
-    key_fields = ["invoice_number", "invoice_date", "total_amount", "vendor_name"]
-    
-    for field in key_fields:
-        pdf_value = pdf_extracted_fields.get(field, "")
-        dolphin_value = dolphin_extracted_fields.get(field, "")
-        
-        validation_results["validation"][field] = {
-            "pdf_regex": pdf_value,
-            "dolphin_llm": dolphin_value,
-            "match": pdf_value.lower() == dolphin_value.lower() if pdf_value and dolphin_value else False,
-            "confidence": "high" if pdf_value and dolphin_value else "low"
-        }
-    
-    return validation_results
-
-def extract_fields_with_regex(text):
-
-    from config import PATTERNS
-    
-    fields = {}
-    for field_name, pattern_list in PATTERNS.items():
-        fields[field_name] = ""  
-        for i, pattern in enumerate(pattern_list):
-
-            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-            if match:
-                extracted_text = match.group(1).strip()
-                extracted_text = re.sub(r'\s+', ' ', extracted_text)
-                fields[field_name] = extracted_text
-                logger.info(f"✅ Found {field_name}: '{extracted_text}' using pattern {i}")
-                break 
-        
-        if not fields[field_name]:
-            logger.debug(f"No match found for {field_name}")
-    
-    return fields
 
 def save_line_items_to_csv(all_results, csv_path):
     """Save extracted line items to CSV."""
@@ -100,8 +96,7 @@ def save_line_items_to_csv(all_results, csv_path):
     for file_results in all_results:
         for result in file_results:
             filename = result["file"]
-            # For now, create placeholder line items
-            # TODO: Extract actual line items from OCR text
+
             csv_data.append({
                 "filename": filename,
                 "line_number": 1,
@@ -122,93 +117,29 @@ def save_line_items_to_csv(all_results, csv_path):
         
         logger.info(f"Lines CSV saved to {csv_path} with {len(csv_data)} records")
 
-def extract_text_from_pdf(pdf_path):
-    try:
-        logger.info(f"Extracting text directly from PDF: {pdf_path.name}")
-        
-        text_content = ""
-        
-        try:
-            with pdfplumber.open(pdf_path) as pdf:
-                logger.info(f"pdfplumber opened PDF successfully. Pages: {len(pdf.pages)}")
-                for page_num, page in enumerate(pdf.pages, 1):
-                    page_text = page.extract_text()
-                    logger.info(f"Page {page_num} extracted {len(page_text) if page_text else 0} characters")
-                    if page_text:
-                        logger.info(f"Page {page_num} preview: {page_text[:100]}...")
-                        text_content += f"\n--- Page {page_num} ---\n"
-                        text_content += page_text
-        except Exception as e:
-            logger.warning(f"pdfplumber failed: {e}, trying PyPDF2")
-            
-
-
-            with open(pdf_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                logger.info(f"PyPDF2 opened PDF successfully. Pages: {len(pdf_reader.pages)}")
-                for page_num, page in enumerate(pdf_reader.pages, 1):
-                    page_text = page.extract_text()
-                    logger.info(f"Page {page_num} extracted {len(page_text) if page_text else 0} characters")
-                    if page_text:
-                        logger.info(f"Page {page_num} preview: {page_text[:100]}...")
-                        text_content += f"\n--- Page {page_num} ---\n"
-                        text_content += page_text
-        
-        logger.info(f"Extracted {len(text_content)} characters from PDF")
-        if len(text_content) > 50:
-            logger.info(f"PDF text preview: {text_content[:200]}...")
-            
-        return text_content.strip()
-        
-    except Exception as e:
-        logger.error(f"PDF text extraction failed: {e}")
-        return ""
     
-def process_file_hybrid(file_path, dolphin, extraction_method):
+def process_file_dolphin_only(file_path, dolphin):
     results = []
     
     if file_path.suffix.lower() == '.pdf':
         # First try direct PDF text extraction
-        pdf_text = extract_text_from_pdf(file_path)
-        
-        if extraction_method in ["pdf", "both"] and pdf_text and len(pdf_text) > 50:
-            logger.info(f"Using PDF text extraction for {file_path.name}")
-            
-            # Extract fields with regex
-            pdf_fields = extract_fields_with_regex(pdf_text)
-            
-            result = {
+        logger.info(f"Using Dolphin OCR for {file_path.name}")
+        images = convert_pdf_to_images(file_path)
+        for i, image in enumerate(images):
+            image = preprocess_image_for_ocr(image)
+            page_name = f"{file_path.stem}_page_{i+1}"
+            ocr_text = process_image_with_dolphin(image, dolphin, page_name)
+
+            results.append({
                 "file": file_path.name,
-                "method": "pdf_extraction",
-                "raw_text": pdf_text,
-                "extracted_fields": pdf_fields,
-                "text_length": len(pdf_text)
-            }
-            
-            # If method is "both", also use Dolphin for validation
-            if extraction_method == "both":
-                dolphin_fields_text = process_text_with_dolphin(pdf_text, dolphin, file_path.name)
-                validation = validate_fields_with_dolphin(pdf_fields, {"raw_response": dolphin_fields_text}, file_path.name)
-                result["dolphin_validation"] = validation
-            
-            results.append(result)
-            
-        if extraction_method in ["ocr", "both"] and (not pdf_text or len(pdf_text) <= 50):
-            logger.info(f"Using Dolphin OCR for {file_path.name}")
-            images = convert_pdf_to_images(file_path)
-            for i, image in enumerate(images):
-                page_name = f"{file_path.stem}_page_{i+1}"
-                ocr_text = process_image_with_dolphin(image, dolphin, page_name)
-                results.append({
-                    "file": file_path.name,
-                    "method": "dolphin_ocr",
-                    "page": i+1,
-                    "raw_text": ocr_text,
-                    "text_length": len(ocr_text)
-                })
-                if ocr_text and len(ocr_text) > 50:
-                    extracted_fields = extract_fields_with_regex(ocr_text)
-                    results[-1]["extracted_fields"] = extracted_fields
+                "method": "dolphin_ocr",
+                "page": i+1,
+                "raw_text": ocr_text,
+                "text_length": len(ocr_text)
+            })
+            if ocr_text and len(ocr_text) > 50:
+                extracted_fields = extract_fields_with_regex(ocr_text)
+                results[-1]["extracted_fields"] = extracted_fields
 
     return results
 
@@ -279,24 +210,6 @@ def find_supported_files(input_dir):
         logger.info(f" - {file.name}")
     
     return supported_files
-def process_dolphin_results_with_field_extraction(results, file_path):
-    """Process Dolphin OCR results and extract fields."""
-    processed_results = []
-    
-    for result in results:
-        raw_text = result.get("raw_text", "")
-        
-        # Extract fields using regex
-        if raw_text and len(raw_text) > 50:  # Good OCR text
-            extracted_fields = extract_fields_with_regex(raw_text)
-            dolphin_fields = extract_fields_from_dolphin_output(raw_text)
-            
-            result["extracted_fields"] = extracted_fields
-            result["dolphin_extracted_fields"] = dolphin_fields
-            
-        processed_results.append(result)
-    
-    return processed_results
 
 def process_image_with_dolphin(image, dolphin_model, file_name):
     try:
@@ -308,8 +221,7 @@ def process_image_with_dolphin(image, dolphin_model, file_name):
         tokenizer = processor.tokenizer
         # Use Dolphin's correct prompt for document parsing
         prompt = "Read text in the image."
-
-        full_prompt = f"<s>{prompt} <Answer/>"
+        full_prompt = f"<s>{prompt} <Answer/>"  
         
         # Prepare inputs for Dolphin
         inputs = processor(image, return_tensors="pt")
@@ -349,73 +261,13 @@ def process_image_with_dolphin(image, dolphin_model, file_name):
         return ""
     
 
-def process_text_with_dolphin(text, dolphin_model, file_name):
-
-    try:
-        logger.info(f"Processing PDF text with Dolphin for {file_name}")
-        
-
-        extracted_info = f"""
-        Based on the PDF text, extract these fields:
-        
-        Text: {text[:1000]}...
-        
-        Extracted fields:
-        - Vendor: Look for company names
-        - Invoice Number: Look for invoice/ref numbers  
-        - Date: Look for dates
-        - Amount: Look for USD amounts
-        - Currency: Look for currency symbols
-        """
-        
-        logger.info(f"Dolphin text analysis completed for {file_name}")
-        return extracted_info
-        
-    except Exception as e:
-        logger.error(f"Dolphin text processing failed for {file_name}: {e}")
-        return ""
-
-def extract_fields_from_dolphin_output(dolphin_output):
-    fields = {
-        "vendor_name": "",
-        "invoice_number": "",
-        "invoice_date": "",
-        "currency": "",
-        "total_amount": ""
-    }
-    
-    # Try to extract fields from Dolphin's structured output
-    try:
-        # Also try regex patterns on the structured text
-        text = dolphin_output.lower()
-        
-        # Extract amounts (USD patterns)
-        amount_match = re.search(r'usd\s*([0-9,]+\.?[0-9]*)', text)
-        if amount_match:
-            fields["total_amount"] = amount_match.group(1)
-            fields["currency"] = "USD"
-            
-        # Extract dates
-        date_match = re.search(r'(\d{1,2}[-/]\w{3}[-/]\d{4}|\d{1,2}[-/]\d{1,2}[-/]\d{4})', text)
-        if date_match:
-            fields["invoice_date"] = date_match.group(1)
-            
-    except Exception as e:
-        logger.warning(f"Failed to parse Dolphin structured output: {e}")
-    
-    return fields
-
-
-
-
 
 def main():
     parser = argparse.ArgumentParser(description="Convert scanned invoices to CSV/JSON using Dolphin OCR")
     parser.add_argument("--in_dir", type=str, required=True, help="Input directory containing scanned invoices")
     parser.add_argument("--out_csv", type=str, default="invoices_header.csv", help="Output CSV file for invoice headers")
     parser.add_argument("--out_json", type=str, default="invoices_raw.json", help="Output JSON file for raw OCR data")
-    parser.add_argument("--method", type=str, choices=["pdf", "ocr", "both"], default="both", 
-                       help="Extraction method: pdf (text extraction), ocr (Dolphin), or both (hybrid)")
+    
     args = parser.parse_args()
 
     logger.info(f"Input directory: {args.in_dir}")
@@ -444,7 +296,7 @@ def main():
     for file_path in supported_files:
         logger.info(f"Processing: {file_path.name}")
         
-        results = process_file_hybrid(file_path, dolphin, args.method)
+        results = process_file_dolphin_only(file_path, dolphin)
         all_results.append(results)
         
         # Save individual JSON results

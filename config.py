@@ -1,5 +1,4 @@
 
-import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
@@ -46,13 +45,6 @@ PATTERNS = {
 }
 
 
-TABLE_KEYWORDS = [
-"description", "quantity", "qty", "price", "amount", "total", 
-"item", "product", "service", "rate", "unit", "cost"
-]
+
 
 SUPPORTED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp"]
-
-
-MAX_WORKERS = 4
-TIMEOUT_SECONDS = 120
