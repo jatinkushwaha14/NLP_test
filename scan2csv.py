@@ -221,7 +221,7 @@ def process_image_with_dolphin(image, dolphin_model, file_name):
         tokenizer = processor.tokenizer
         # Use Dolphin's correct prompt for document parsing
         prompt = "Read text in the image."
-        full_prompt = f"<s>{prompt} <Answer/>"  
+        full_prompt = f"<s>{prompt} <Answer/>"
         
         # Prepare inputs for Dolphin
         inputs = processor(image, return_tensors="pt")
@@ -236,7 +236,11 @@ def process_image_with_dolphin(image, dolphin_model, file_name):
                 decoder_input_ids=prompt_ids,
                 decoder_attention_mask=decoder_attention_mask,
                 max_new_tokens=2048,
-                num_beams=1,
+                num_beams=3,
+                temperature=0.7,  # ADD: Slight randomness to avoid repetition
+                do_sample=False,  # Keep greedy with beam search
+                repetition_penalty=1.2,  # ADD: Penalize repetitive output
+                length_penalty=1.0,
                 pad_token_id=tokenizer.pad_token_id,
                 eos_token_id=tokenizer.eos_token_id,
             )
@@ -247,8 +251,6 @@ def process_image_with_dolphin(image, dolphin_model, file_name):
         # Remove prompt from output
         if prompt in parsed_content:
             parsed_content = parsed_content.replace(prompt, "").strip()
-        if "<Answer/>" in parsed_content:
-            parsed_content = parsed_content.split("<Answer/>")[-1].strip()
             
         logger.info(f"Dolphin document parsing completed for {file_name}")
         logger.info(f"Parsed content length: {len(parsed_content)}")

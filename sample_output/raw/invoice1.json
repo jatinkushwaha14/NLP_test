@@ -3,7 +3,14 @@
     "file": "invoice1.pdf",
     "method": "dolphin_ocr",
     "page": 1,
-    "raw_text": "[0.18,0.00,0.81]",
-    "text_length": 16
+    "raw_text": "[0.51,0.00,0.60] header[0.75,0.00,0.82,0.01] header[0.18,0.00,0.41,0.01] header[0.25,0.10,0.37,0.13] para[0.61,0.11,0.71,0.12] para[0.42,0.20,0.60,0.21] sec[0.25,0.23,0.76,0.29] para[0.25,0.29,0.76,0.70] tab[0.24,0.72,0.54,0.79] para[0.60,0.70,0.76,0.79] para[0.25,0.83,0.48,0.93] fig[0.24,0.96,0.29,0.96] foot[0.76,0.94,0.81,0.94] foot",
+    "text_length": 336,
+    "extracted_fields": {
+      "vendor_name": "",
+      "invoice_number": "",
+      "invoice_date": "",
+      "currency": "",
+      "total_amount": ""
+    }
   }
 ]

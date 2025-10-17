@@ -1,3 +1,5 @@
 filename,vendor_name,invoice_number,invoice_date,currency,total_amount
-invoice3.pdf,GuiComGroup,2015850100,20 PRI 1414,PRI,"32,342,194.62"
-invoice2.pdf,,,,,0.68
+invoice3.pdf,,,,PRI,
+invoice2.pdf,,,,,
+invoice1.pdf,,,,,
+invoice4.pdf,,,,,
